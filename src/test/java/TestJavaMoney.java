@@ -1,20 +1,26 @@
+import org.example.CrocusCurrencyProvider;
 import org.javamoney.moneta.CurrencyUnitBuilder;
 import org.javamoney.moneta.FastMoney;
 import org.javamoney.moneta.Money;
+import org.javamoney.moneta.convert.ExchangeRateBuilder;
+import org.javamoney.moneta.internal.ConfigurableCurrencyUnitProvider;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.BlockJUnit4ClassRunner;
 
+import javax.management.MXBean;
 import javax.money.*;
 import javax.money.convert.CurrencyConversion;
 import javax.money.convert.ExchangeRateProvider;
+import javax.money.convert.ExchangeRateProviderSupplier;
 import javax.money.convert.MonetaryConversions;
 import javax.money.format.AmountFormatQueryBuilder;
 import javax.money.format.MonetaryAmountFormat;
 import javax.money.format.MonetaryFormats;
-import java.util.Currency;
-import java.util.Date;
-import java.util.Locale;
+import javax.money.spi.Bootstrap;
+import javax.money.spi.CurrencyProviderSpi;
+import javax.money.spi.ServiceProvider;
+import java.util.*;
 
 @RunWith(BlockJUnit4ClassRunner.class)
 public class TestJavaMoney {
@@ -54,6 +60,7 @@ public class TestJavaMoney {
         MonetaryAmount amount = Monetary.getDefaultAmountFactory().setCurrency(euros).setNumber(500.0).create();
 
         MonetaryAmount amount2 = Monetary.getDefaultAmountFactory().setCurrency("COP").setNumber(500_000L).create();
+
 
         // on ne peut pas mélanger 2 montants de monnaie différentes
         // MonetaryException
@@ -136,11 +143,20 @@ public class TestJavaMoney {
         ExchangeRateProvider ecbRateProvider = MonetaryConversions
                 .getExchangeRateProvider("ECB");
 
+
+
+        // en fait, soit on le récupère par SPI via MonetaryConversions.getExchangeProviders, soit
+        // on l'instancie nous meme !
+
+
+
         CurrencyConversion conversion = ecbRateProvider.getCurrencyConversion("EUR");
 
 
         //MonetaryAmount money = Money.of(10, "USD");
         MonetaryAmount money = Monetary.getDefaultAmountFactory().setCurrency("USD").setNumber(500.0).create();
+
+
 
         System.out.println(money.with(conversion));
         //--> Attention, les MonetaryAmount doivent être créé avec le Amount Factory, sion
@@ -174,26 +190,46 @@ public class TestJavaMoney {
     @Test
     public void avoirSonPropreCurrencyProvider() {
 
+        System.out.println("== CURRENCY PROVIDERS ==");
         Monetary.getCurrencyProviderNames().stream().forEach(System.out::println);
+
+        System.out.println("== END ==");
 
         CurrencyUnit euros = Monetary.getCurrency("EUR");
 
         // https://dzone.com/articles/java-service-loader-vs-spring-factories-loader
 
+        Monetary.getCurrencyProviderNames().forEach(System.out::println);
+
+        Monetary.getAmountFactories().forEach(System.out::println);
+
+
+
+        // CurrencyUnit unit = Monetary.getCurrency(CurrencyQueryBuilder.of().)
+
+        // il est possible d'implémenter son CurrencyUnitProvider et d'en faire un
+        // Bean Spring
+        // CurrencyUnitProvider
+        // il sera injecté pour récupérer le getCurrency dessus.
+        CurrencyProviderSpi s = null;
+
+        //MonetaryConversions.getExchangeRateProvider().
 
     }
+
 
     @Test
     public void LaCurrencyUnitPeutAvoirUneDateDeValidite() {
 
 
         CurrencyUnit frf = Monetary.getCurrency("FRF");
+
         // https://dzone.com/articles/java-service-loader-vs-spring-factories-loader
         //CurrencyUnit euros = Monetary.getCurrency("EUR");
 
         // il est tout a fait possible d'utiliser les CurrencyCOntext pour porter des inforations complémentaires sur
         // la monnaie.
-        frf.getContext();
+
         frf.getContext().getKeys(Object.class).stream().forEach(System.out::println);
 
         // il est possible d'enregistrer les Currencies qu'on vient de créer
@@ -213,8 +249,6 @@ public class TestJavaMoney {
 
         CurrencyQueryBuilder.of().setCurrencyCodes("EUR").set("validDate", new Date()).build();
 
-
-
     }
 
 
@@ -222,8 +256,40 @@ public class TestJavaMoney {
 
     // les données sont mises en cache dans un répertoire local appelé .resourceCache.
     // il contient les XML récupérés de l'ECB et FMI.
-    
 
+
+    @Test
+    public void testBootStrap() {
+
+        ServiceProvider p = new ServiceProvider() {
+            @Override
+            public int getPriority() {
+                return 0;
+            }
+
+            @Override
+            public <T> List<T> getServices(Class<T> serviceType) {
+                System.out.println("searching for : " + serviceType);
+
+                // ici, je peux tout a fait envisager que ce soit un Bean Spring !
+                // et qu'il retourne un ensemble de bean qui implémente :
+                // - CurrencyProvider
+                // - MonetaryCurrenciesSingleton
+                // - MonetaryAmountSingleton
+                // - MonetaryRounding
+
+
+                return Collections.emptyList();
+            }
+        };
+
+        Bootstrap.init(p);
+        Bootstrap.getServices(CurrencyProviderSpi.class).forEach(System.out::println);
+
+        CurrencyUnit u = Monetary.getCurrency("EUR");
+        Monetary.getAmountFactories();
+
+    }
 
 }
 
